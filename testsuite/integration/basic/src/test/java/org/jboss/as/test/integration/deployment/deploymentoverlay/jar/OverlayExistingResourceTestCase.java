@@ -31,6 +31,9 @@ import org.jboss.shrinkwrap.api.Archive;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.wildfly.security.auth.client.AuthenticationConfiguration;
+import org.wildfly.security.auth.client.AuthenticationContext;
+import org.wildfly.security.auth.client.MatchRule;
 
 /**
  * @author baranowb
@@ -44,27 +47,42 @@ public class OverlayExistingResourceTestCase extends JarOverlayTestBase {
     private static final String DEPLOYMENT_OVERLAYED_ARCHIVE = DEPLOYMENT_OVERLAYED + ".jar";
 
     @Deployment(name = DEPLOYMENT_OVERLAYED)
-    public static Archive createDeployment() throws Exception {
+    public static Archive<?> createDeployment() throws Exception {
         return createOverlayedArchive(true, DEPLOYMENT_OVERLAYED_ARCHIVE);
     }
 
-    @Test
-    public void testOverlay() throws Exception {
-        final InitialContext ctx = getInitialContext();
-        try{
-        OverlayableInterface iface = (OverlayableInterface) ctx.lookup(getEjbBinding("", DEPLOYMENT_OVERLAYED, "",
-                OverlayEJB.class, OverlayableInterface.class));
-        Assert.assertEquals("Overlayed resource does not match pre-overlay expectations!", OverlayableInterface.ORIGINAL, iface.fetchResource());
-        Assert.assertEquals("Static resource does not match pre-overlay expectations!", OverlayableInterface.STATIC, iface.fetchResourceStatic());
-        OverlayUtils.setupOverlay(managementClient, DEPLOYMENT_OVERLAYED_ARCHIVE, OVERLAY, OverlayableInterface.RESOURCE, OverlayableInterface.OVERLAYED);
-        Assert.assertEquals("Overlayed resource does not match post-overlay expectations!", OverlayableInterface.OVERLAYED, iface.fetchResource());
-        Assert.assertEquals("Static resource does not match post-overlay expectations!", OverlayableInterface.STATIC, iface.fetchResourceStatic());
-        } finally {
-            try{
-                ctx.close();
-            }catch(Exception e){
-            }
-            OverlayUtils.removeOverlay(managementClient, DEPLOYMENT_OVERLAYED_ARCHIVE, OVERLAY, OverlayableInterface.RESOURCE);
+//@Test
+public void testOverlayAC() throws Exception {
+    AuthenticationContext.empty()
+        .with(MatchRule.ALL,
+            // just set username/password into AuthenticationConfiguration
+            AuthenticationConfiguration.EMPTY.useName("user1").usePassword("password1"))
+        // and run original test method
+        .runExConsumer(s -> testOverlay(), null);
+}
+
+@Test
+public void testOverlay() throws Exception {
+    final InitialContext ctx = getInitialContext();
+    OverlayableInterface iface = (OverlayableInterface) ctx
+            .lookup(getEjbBinding("", DEPLOYMENT_OVERLAYED, "", OverlayEJB.class, OverlayableInterface.class));
+    Assert.assertEquals("Overlayed resource does not match pre-overlay expectations!", OverlayableInterface.ORIGINAL,
+            iface.fetchResource());
+    Assert.assertEquals("Static resource does not match pre-overlay expectations!", OverlayableInterface.STATIC,
+            iface.fetchResourceStatic());
+    try {
+        OverlayUtils.setupOverlay(managementClient, DEPLOYMENT_OVERLAYED_ARCHIVE, OVERLAY, OverlayableInterface.RESOURCE,
+                OverlayableInterface.OVERLAYED);
+        Assert.assertEquals("Overlayed resource does not match post-overlay expectations!", OverlayableInterface.OVERLAYED,
+                iface.fetchResource());
+        Assert.assertEquals("Static resource does not match post-overlay expectations!", OverlayableInterface.STATIC,
+                iface.fetchResourceStatic());
+    } finally {
+        try {
+            ctx.close();
+        } catch (Exception e) {
         }
+        OverlayUtils.removeOverlay(managementClient, DEPLOYMENT_OVERLAYED_ARCHIVE, OVERLAY, OverlayableInterface.RESOURCE);
     }
+}
 }

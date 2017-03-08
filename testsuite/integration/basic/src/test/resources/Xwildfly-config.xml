@@ -1,0 +1,20 @@
+<configuration>
+  <authentication-client xmlns="urn:elytron:1.0">
+    <authentication-rules>
+      <rule use-configuration="default">
+        <match-port number="8080"/>
+      </rule>
+    </authentication-rules>
+    <authentication-configurations>
+      <configuration name="default">
+        <allow-all-sasl-mechanisms />
+        <use-service-loader-providers />
+        <set-user-name name="user1" />
+        <credentials>
+          <clear-password password="password1" />
+        </credentials>
+        <set-mechanism-realm name="ApplicationRealm" />
+      </configuration>
+    </authentication-configurations>
+  </authentication-client>
+</configuration>
