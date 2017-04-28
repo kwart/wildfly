@@ -181,10 +181,12 @@ public class SaslJmsClientTestCase {
 
     @Test
     public void testOtpAccess() throws Exception {
+        assertSequenceAndHash(99, OTP_HASH_99);
         Runnable runAndExpectFail = () -> sendAndReceiveMsg(PORT_OTP, true);
         AuthenticationContext.empty()
                 .with(MatchRule.ALL, AuthenticationConfiguration.EMPTY.useDefaultProviders().allowSaslMechanisms(OTP))
                 .run(runAndExpectFail);
+        assertSequenceAndHash(99, OTP_HASH_99);
         AuthenticationContext.empty().with(MatchRule.ALL, AuthenticationConfiguration.EMPTY.useDefaultProviders()
                 .allowSaslMechanisms(OTP).useName("jduke").usePassword("TeSt")).run(runAndExpectFail);
         assertSequenceAndHash(99, OTP_HASH_99);
@@ -304,9 +306,19 @@ public class SaslJmsClientTestCase {
                     .build());
 
             elements.add(new OtpLdapConf());
-            elements.add(SimpleSecurityDomain.builder().withName(NAME).withDefaultRealm(OTP).withPermissionMapper(NAME)
+            elements.add(SimpleSecurityDomain.builder().withName(OTP).withDefaultRealm(OTP).withPermissionMapper(NAME)
                     .withRealms(SecurityDomainRealm.builder().withRealm(OTP).withRoleDecoder("groups-to-roles").build())
                     .build());
+
+            elements.add(SimpleConfigurableSaslServerFactory.builder().withName(OTP).withSaslServerFactory("elytron")
+                    .addFilter(SaslFilter.builder().withPatternFilter(OTP).build()).build());
+            elements.add(SimpleSaslAuthenticationFactory.builder().withName(OTP).withSaslServerFactory(OTP)
+                    .withSecurityDomain(OTP)
+                    .addMechanismConfiguration(MechanismConfiguration.builder().withMechanismName(OTP).build()).build());
+
+            elements.add(SimpleSocketBinding.builder().withName(OTP).withPort(PORT_OTP).build());
+            elements.add(SimpleRemotingConnector.builder().withName(OTP).withSocketBinding(OTP)
+                    .withSaslAuthenticationFactory(OTP).build());
 
             elements.add(SimpleConfigurableSaslServerFactory.builder().withName(ANONYMOUS).withSaslServerFactory("elytron")
                     .addFilter(SaslFilter.builder().withPatternFilter(ANONYMOUS).build()).build());
@@ -347,14 +359,19 @@ public class SaslJmsClientTestCase {
                 Encoder b64e = Base64.getEncoder();
                 directoryService = DSAnnotationProcessor.getDirectoryService();
                 DSAnnotationProcessor.injectEntries(directoryService,
-                        "dn: cn=jduke,dc=wildfly,dc=org\n" //
+                        "dn: dc=wildfly,dc=org\n" //
+                                + "dc: jboss\n" //
+                                + "objectClass: top\n" //
+                                + "objectClass: domain\n" //
+                                + "\n" //
+                                + "dn: cn=jduke,dc=wildfly,dc=org\n" //
                                 + "objectclass: top\n" //
                                 + "objectclass: person\n" //
                                 + "objectclass: organizationalPerson\n" //
                                 + "cn: jduke\n" //
                                 + "street: guest\n" // role ;)
                                 + "sn: " + OTP_ALGORITHM + "\n" // algorithm
-                                + "title: " + b64e.encode(OTP_HASH_99) + "\n" // stored hash
+                                + "title: " + b64e.encodeToString(OTP_HASH_99) + "\n" // stored hash
                                 + "description: " + b64e.encodeToString(OTP_SEED.getBytes(StandardCharsets.US_ASCII)) + "\n" // seed
                                 + "telephoneNumber: 99\n" // sequence
                 );
