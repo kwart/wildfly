@@ -105,7 +105,7 @@ import org.wildfly.test.security.common.other.SimpleSocketBinding;
  */
 @RunWith(Arquillian.class)
 @RunAsClient
-@ServerSetup({ SaslJmsClientTestCase.JmsAndLdapSetup.class, SaslJmsClientTestCase.ServerSetup.class })
+@ServerSetup({ SaslJmsClientTestCase.JmsSetup.class, SaslJmsClientTestCase.ServerSetup.class })
 public class SaslJmsClientTestCase {
 
     private static Logger LOGGER = Logger.getLogger(SaslJmsClientTestCase.class);
@@ -275,7 +275,7 @@ public class SaslJmsClientTestCase {
         }
     }
 
-    public static class JmsAndLdapSetup implements ServerSetupTask {
+    public static class JmsSetup implements ServerSetupTask {
 
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
