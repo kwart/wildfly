@@ -39,13 +39,15 @@ import org.wildfly.test.security.common.elytron.ConfigurableElement;
 public class SimpleMgmtNativeInterface implements ConfigurableElement {
 
     private static final PathAddress PATH_NATIVE_INTERFACE = PathAddress.pathAddress().append("core-service", "management").append("management-interface", "native-interface");
-    
+
     private final String saslAuthenticationFactory;
     private final String socketBinding;
+    private final String sslContext;
 
     private SimpleMgmtNativeInterface(Builder builder) {
         this.saslAuthenticationFactory = builder.saslAuthenticationFactory;
         this.socketBinding = builder.socketBinding;
+        this.sslContext = builder.sslContext;
     }
 
     @Override
@@ -54,6 +56,7 @@ public class SimpleMgmtNativeInterface implements ConfigurableElement {
                 .createAddOperation(PATH_NATIVE_INTERFACE);
         setIfNotNull(op, "sasl-authentication-factory", saslAuthenticationFactory);
         setIfNotNull(op, "socket-binding", socketBinding);
+        setIfNotNull(op, "ssl-context", sslContext);
 
         Utils.applyUpdate(op, client);
     }
@@ -83,12 +86,18 @@ public class SimpleMgmtNativeInterface implements ConfigurableElement {
     public static final class Builder {
         private String saslAuthenticationFactory;
         private String socketBinding;
+        private String sslContext;
 
         private Builder() {
         }
 
         public Builder withSaslAuthenticationFactory(String saslAuthenticationFactory) {
             this.saslAuthenticationFactory = saslAuthenticationFactory;
+            return this;
+        }
+
+        public Builder withSslContext(String sslContext) {
+            this.sslContext = sslContext;
             return this;
         }
 
