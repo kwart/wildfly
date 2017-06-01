@@ -16,54 +16,51 @@
 
 package org.wildfly.test.integration.elytron.sasl.mgmt;
 
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.is;
-import static org.jboss.as.test.integration.security.common.SecurityTestConstants.KEYSTORE_PASSWORD;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.wildfly.test.integration.elytron.sasl.mgmt.AbstractMgmtSaslTestBase.CONNECTION_TIMEOUT_IN_MS;
 import static org.wildfly.test.integration.elytron.sasl.mgmt.AbstractMgmtSaslTestBase.PORT_NATIVE;
 import static org.wildfly.test.integration.elytron.sasl.mgmt.AbstractMgmtSaslTestBase.assertWhoAmI;
-import static org.wildfly.test.integration.elytron.sasl.mgmt.AbstractMgmtSaslTestBase.executeWhoAmI;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyStore;
+import java.security.PrivilegedAction;
 import java.security.Security;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.net.ssl.KeyManager;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509ExtendedKeyManager;
-import javax.net.ssl.X509TrustManager;
-
+import javax.security.auth.Subject;
+import javax.security.auth.login.Configuration;
+import javax.security.auth.login.LoginContext;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.text.StrSubstitutor;
+import org.apache.directory.api.ldap.model.constants.SupportedSaslMechanisms;
 import org.apache.directory.api.ldap.model.entry.DefaultEntry;
 import org.apache.directory.api.ldap.model.ldif.LdifEntry;
 import org.apache.directory.api.ldap.model.ldif.LdifReader;
 import org.apache.directory.api.ldap.model.schema.SchemaManager;
 import org.apache.directory.server.annotations.CreateKdcServer;
+import org.apache.directory.server.annotations.CreateLdapServer;
 import org.apache.directory.server.annotations.CreateTransport;
+import org.apache.directory.server.annotations.SaslMechanism;
+import org.apache.directory.server.core.annotations.AnnotationUtils;
 import org.apache.directory.server.core.annotations.CreateDS;
 import org.apache.directory.server.core.annotations.CreatePartition;
 import org.apache.directory.server.core.api.DirectoryService;
 import org.apache.directory.server.core.factory.DSAnnotationProcessor;
 import org.apache.directory.server.core.kerberos.KeyDerivationInterceptor;
+import org.apache.directory.server.factory.ServerAnnotationProcessor;
 import org.apache.directory.server.kerberos.kdc.KdcServer;
+import org.apache.directory.server.ldap.LdapServer;
+import org.apache.directory.server.ldap.handlers.sasl.cramMD5.CramMd5MechanismHandler;
+import org.apache.directory.server.ldap.handlers.sasl.digestMD5.DigestMd5MechanismHandler;
+import org.apache.directory.server.ldap.handlers.sasl.gssapi.GssapiMechanismHandler;
+import org.apache.directory.server.ldap.handlers.sasl.ntlm.NtlmMechanismHandler;
+import org.apache.directory.server.ldap.handlers.sasl.plain.PlainMechanismHandler;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.ietf.jgss.GSSCredential;
+import org.ietf.jgss.GSSManager;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
@@ -72,10 +69,12 @@ import org.jboss.as.arquillian.api.ServerSetupTask;
 import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.network.NetworkUtils;
 import org.jboss.as.test.integration.ldap.InMemoryDirectoryServiceFactory;
-import org.jboss.as.test.integration.management.util.CLIWrapper;
 import org.jboss.as.test.integration.security.common.AbstractKrb5ConfServerSetupTask;
 import org.jboss.as.test.integration.security.common.KDCServerAnnotationProcessor;
 import org.jboss.as.test.integration.security.common.KerberosSystemPropertiesSetupTask;
+import org.jboss.as.test.integration.security.common.Krb5LoginConfiguration;
+import org.jboss.as.test.integration.security.common.ManagedCreateLdapServer;
+import org.jboss.as.test.integration.security.common.ManagedCreateTransport;
 import org.jboss.as.test.integration.security.common.SecurityTestConstants;
 import org.jboss.as.test.integration.security.common.Utils;
 import org.jboss.logging.Logger;
@@ -84,32 +83,28 @@ import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.wildfly.security.SecurityFactory;
 import org.wildfly.security.auth.client.AuthenticationConfiguration;
 import org.wildfly.security.auth.client.AuthenticationContext;
 import org.wildfly.security.auth.client.MatchRule;
 import org.wildfly.security.auth.permission.LoginPermission;
-import org.wildfly.security.ssl.SSLContextBuilder;
 import org.wildfly.test.security.common.AbstractElytronSetupTask;
 import org.wildfly.test.security.common.elytron.ConfigurableElement;
 import org.wildfly.test.security.common.elytron.ConstantPermissionMapper;
-import org.wildfly.test.security.common.elytron.ConstantPrincipalTransformer;
 import org.wildfly.test.security.common.elytron.CredentialReference;
-import org.wildfly.test.security.common.elytron.KeyStoreRealm;
+import org.wildfly.test.security.common.elytron.DirContext;
+import org.wildfly.test.security.common.elytron.IdentityMapping;
+import org.wildfly.test.security.common.elytron.KerberosSecurityFactory;
+import org.wildfly.test.security.common.elytron.LdapRealm;
 import org.wildfly.test.security.common.elytron.MechanismConfiguration;
+import org.wildfly.test.security.common.elytron.MechanismRealmConfiguration;
 import org.wildfly.test.security.common.elytron.Path;
 import org.wildfly.test.security.common.elytron.PermissionRef;
 import org.wildfly.test.security.common.elytron.SaslFilter;
 import org.wildfly.test.security.common.elytron.SimpleConfigurableSaslServerFactory;
-import org.wildfly.test.security.common.elytron.SimpleKeyManager;
-import org.wildfly.test.security.common.elytron.SimpleKeyStore;
-import org.wildfly.test.security.common.elytron.SimpleKeyStore.Builder;
 import org.wildfly.test.security.common.elytron.SimpleSaslAuthenticationFactory;
 import org.wildfly.test.security.common.elytron.SimpleSecurityDomain;
 import org.wildfly.test.security.common.elytron.SimpleSecurityDomain.SecurityDomainRealm;
-import org.wildfly.test.security.common.elytron.SimpleServerSslContext;
-import org.wildfly.test.security.common.elytron.SimpleTrustManager;
-import org.wildfly.test.security.common.elytron.X500AttributePrincipalDecoder;
+import org.wildfly.test.security.common.elytron.TrustedDomainsConfigurator;
 import org.wildfly.test.security.common.other.SimpleMgmtNativeInterface;
 import org.wildfly.test.security.common.other.SimpleSocketBinding;
 
@@ -120,33 +115,36 @@ import org.wildfly.test.security.common.other.SimpleSocketBinding;
  */
 @RunWith(Arquillian.class)
 @ServerSetup({ GssapiMgmtSaslTestCase.Krb5ConfServerSetupTask.class, //
-    KerberosSystemPropertiesSetupTask.class, //
-    GssapiMgmtSaslTestCase.KDCServerSetupTask.class, //
-//    GssapiMgmtSaslTestCase.KeyMaterialSetup.class, //
-    GssapiMgmtSaslTestCase.ServerSetup.class })
+        KerberosSystemPropertiesSetupTask.class, //
+        GssapiMgmtSaslTestCase.DirectoryServerSetupTask.class, //
+        // GssapiMgmtSaslTestCase.KeyMaterialSetup.class, //
+        GssapiMgmtSaslTestCase.ServerSetup.class })
 @RunAsClient
 public class GssapiMgmtSaslTestCase {
 
     private static Logger LOGGER = Logger.getLogger(GssapiMgmtSaslTestCase.class);
 
     private static final String NAME = GssapiMgmtSaslTestCase.class.getSimpleName();
+    private static final int LDAP_PORT = 10389;
+    private static final String LDAP_URL = "ldap://"
+            + NetworkUtils.formatPossibleIpv6Address(Utils.getSecondaryTestAddress(null, true)) + ":" + LDAP_PORT;
 
-    private static final File WORK_DIR;
+    private static final File WORK_DIR_GSSAPI;
     static {
         try {
-            WORK_DIR = Utils.createTemporaryFolder("external-");
+            WORK_DIR_GSSAPI = Utils.createTemporaryFolder("gssapi-");
         } catch (IOException e) {
             throw new RuntimeException("Unable to create temporary folder", e);
         }
     }
 
-    private static final File SERVER_KEYSTORE_FILE = new File(WORK_DIR, SecurityTestConstants.SERVER_KEYSTORE);
-    private static final File SERVER_TRUSTSTORE_FILE = new File(WORK_DIR, SecurityTestConstants.SERVER_TRUSTSTORE);
-    private static final File CLIENT_KEYSTORE_FILE = new File(WORK_DIR, SecurityTestConstants.CLIENT_KEYSTORE);
-    private static final File CLIENT_TRUSTSTORE_FILE = new File(WORK_DIR, SecurityTestConstants.CLIENT_TRUSTSTORE);
-    private static final File UNTRUSTED_STORE_FILE = new File(WORK_DIR, SecurityTestConstants.UNTRUSTED_KEYSTORE);
+    private static final File SERVER_KEYSTORE_FILE = new File(WORK_DIR_GSSAPI, SecurityTestConstants.SERVER_KEYSTORE);
+    private static final File SERVER_TRUSTSTORE_FILE = new File(WORK_DIR_GSSAPI, SecurityTestConstants.SERVER_TRUSTSTORE);
+    private static final File CLIENT_KEYSTORE_FILE = new File(WORK_DIR_GSSAPI, SecurityTestConstants.CLIENT_KEYSTORE);
+    private static final File CLIENT_TRUSTSTORE_FILE = new File(WORK_DIR_GSSAPI, SecurityTestConstants.CLIENT_TRUSTSTORE);
+    private static final File UNTRUSTED_STORE_FILE = new File(WORK_DIR_GSSAPI, SecurityTestConstants.UNTRUSTED_KEYSTORE);
 
-    private static final String MECHANISM = "EXTERNAL";
+    private static final String MECHANISM = "GSSAPI";
 
     // @Override
     protected String getMechanism() {
@@ -163,90 +161,35 @@ public class GssapiMgmtSaslTestCase {
      */
     @Test
     public void testCorrectMechanismPasses() throws Exception {
-        AuthenticationConfiguration authCfg = AuthenticationConfiguration.EMPTY
+        final Krb5LoginConfiguration krb5Configuration = new Krb5LoginConfiguration(Utils.getLoginConfiguration());
+        // Use our custom configuration to avoid reliance on external config
+        Configuration.setConfiguration(krb5Configuration);
+        // 1. Authenticate to Kerberos.
+        final LoginContext lc = Utils.loginWithKerberos(krb5Configuration, "hnelson", "secret");
+
+        AuthenticationConfiguration authCfg = AuthenticationConfiguration.empty()
                 // .useDefaultProviders()
-                .allowSaslMechanisms(MECHANISM);
+                .allowSaslMechanisms(MECHANISM).useGSSCredential(getGSSCredential(lc.getSubject()));
 
-        SecurityFactory<SSLContext> ssl = new SSLContextBuilder().setClientMode(true)
-                .setKeyManager(getKeyManager(CLIENT_KEYSTORE_FILE)).setTrustManager(getTrustManager()).build();
-        AuthenticationContext.empty().with(MatchRule.ALL, authCfg).withSsl(MatchRule.ALL, ssl)
-                .run(() -> assertWhoAmI("client"));
+        AuthenticationContext.empty().with(MatchRule.ALL, authCfg).run(() -> assertWhoAmI("hnelson"));
+
+        lc.logout();
+        krb5Configuration.resetConfiguration();
     }
 
-    /**
-     * Tests that client with wrong (untrusted) certificate is not able to execute operation on server through the mechanism.
-     */
-    @Test
-    public void testUntrustedCertFails() throws Exception {
-        AuthenticationConfiguration authCfg = AuthenticationConfiguration.EMPTY
-                // .useDefaultProviders()
-                .allowSaslMechanisms(MECHANISM);
-
-        SecurityFactory<SSLContext> ssl = new SSLContextBuilder().setClientMode(true)
-                .setKeyManager(getKeyManager(UNTRUSTED_STORE_FILE)).setTrustManager(getTrustManager()).build();
-        AuthenticationContext.empty().with(MatchRule.ALL, authCfg).withSsl(MatchRule.ALL, ssl)
-                .run(() -> assertCertAuthenticationFails(
-                        "Client certificate authentication should fail for an untrusted certificate."));
-    }
-
-    protected static void assertCertAuthenticationFails(String message) {
-        final long startTime = System.currentTimeMillis();
-        try {
-            executeWhoAmI();
-            fail(message);
-        } catch (IOException e) {
-            assertTrue("Connection reached its timeout (hang).",
-                    startTime + CONNECTION_TIMEOUT_IN_MS > System.currentTimeMillis());
-            Throwable cause = e.getCause();
-            assertThat("ConnectionException was expected as a cause when certificate authentication fails", cause,
-                    is(instanceOf(ConnectException.class)));
-            assertThat("SSLException was expected as the second cause when certificate authentication fails", cause.getCause(),
-                    is(instanceOf(SSLException.class)));
-        }
-    }
-
-    /**
-     * Get the key manager backed by the specified key store.
-     *
-     * @return the initialized key manager.
-     */
-    private static X509ExtendedKeyManager getKeyManager(final File ksFile) throws Exception {
-        KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        keyManagerFactory.init(loadKeyStore(ksFile), KEYSTORE_PASSWORD.toCharArray());
-
-        for (KeyManager current : keyManagerFactory.getKeyManagers()) {
-            if (current instanceof X509ExtendedKeyManager) {
-                return (X509ExtendedKeyManager) current;
+    private GSSCredential getGSSCredential(Subject subject) {
+        return Subject.doAs(subject, new PrivilegedAction<GSSCredential>() {
+            @Override
+            public GSSCredential run() {
+                try {
+                    GSSManager gssManager = GSSManager.getInstance();
+                    return gssManager.createCredential(GSSCredential.INITIATE_ONLY);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return null;
             }
-        }
-
-        throw new IllegalStateException("Unable to obtain X509ExtendedKeyManager.");
-    }
-
-    /**
-     * Get the trust manager for {@link #CLIENT_TRUSTSTORE_FILE}.
-     *
-     * @return the trust manager
-     */
-    private static X509TrustManager getTrustManager() throws Exception {
-        TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustManagerFactory.init(loadKeyStore(CLIENT_TRUSTSTORE_FILE));
-
-        for (TrustManager current : trustManagerFactory.getTrustManagers()) {
-            if (current instanceof X509TrustManager) {
-                return (X509TrustManager) current;
-            }
-        }
-
-        throw new IllegalStateException("Unable to obtain X509TrustManager.");
-    }
-
-    private static KeyStore loadKeyStore(final File ksFile) throws Exception {
-        KeyStore ks = KeyStore.getInstance("JKS");
-        try (FileInputStream fis = new FileInputStream(ksFile)) {
-            ks.load(fis, KEYSTORE_PASSWORD.toCharArray());
-        }
-        return ks;
+        });
     }
 
     /**
@@ -258,75 +201,47 @@ public class GssapiMgmtSaslTestCase {
         protected ConfigurableElement[] getConfigurableElements() {
             List<ConfigurableElement> elements = new ArrayList<>();
 
-            final CredentialReference credentialReference = CredentialReference.builder().withClearText(KEYSTORE_PASSWORD)
-                    .build();
-
             elements.add(ConstantPermissionMapper.builder().withName(NAME)
                     .withPermissions(PermissionRef.fromPermission(new LoginPermission())).build());
 
-            // KeyStores
-            final Builder ksCommon = SimpleKeyStore.builder().withType("JKS").withCredentialReference(credentialReference);
-            elements.add(ksCommon.withName("server-keystore")
-                    .withPath(Path.builder().withPath(SERVER_KEYSTORE_FILE.getAbsolutePath()).build()).build());
-            elements.add(ksCommon.withName("server-truststore")
-                    .withPath(Path.builder().withPath(SERVER_TRUSTSTORE_FILE.getAbsolutePath()).build()).build());
-
-            // Key and Trust Managers
-            elements.add(SimpleKeyManager.builder().withName("server-keymanager").withCredentialReference(credentialReference)
-                    .withKeyStore("server-keystore").build());
-            elements.add(
-                    SimpleTrustManager.builder().withName("server-trustmanager").withKeyStore("server-truststore").build());
-
-            // Realms
-            elements.add(KeyStoreRealm.builder().withName(NAME).withKeyStore("server-truststore").build());
-
-            // Mappers
-            elements.add(X500AttributePrincipalDecoder.builder().withName(NAME).withAttributeName("CN")
-                    .withMaximumSegments(1).build());
-
-            // Transformer
-            elements.add(ConstantPrincipalTransformer.builder().withName(NAME).withConstant("cn=client").build());
-
-            // Domain
+            // dir-context
+            elements.add(DirContext.builder().withName(NAME).withUrl(LDAP_URL).withPrincipal("uid=admin,ou=system")
+                    .withCredentialReference(CredentialReference.builder().withClearText("secret").build()).build());
+            // ldap-realm
+            elements.add(LdapRealm.builder()
+                    .withName(NAME).withDirContext(NAME).withIdentityMapping(IdentityMapping.builder()
+                            .withRdnIdentifier("krb5PrincipalName").withSearchBaseDn("ou=Users,dc=wildfly,dc=org").build())
+                    .build());
+            // security-domain
             elements.add(SimpleSecurityDomain.builder().withName(NAME).withDefaultRealm(NAME).withPermissionMapper(NAME)
-                    .withPrincipalDecoder(NAME)
-                    .withRealms(SecurityDomainRealm.builder().withRealm(NAME).withPrincipalTransformer(NAME).build()).build());
-            elements.add(new ConfigurableElement() {
-                @Override
-                public void create(CLIWrapper cli) throws Exception {
-                    cli.sendLine(String.format(
-                            "/subsystem=elytron/security-domain=ManagementDomain:write-attribute(name=trusted-security-domains, value=[%s])",
-                            NAME));
-                }
+                    .withRealms(SecurityDomainRealm.builder().withRealm(NAME).build()).build());
+            // domain trust for ManagementDomain
+            elements.add(
+                    TrustedDomainsConfigurator.builder().withName("ManagementDomain").withTrustedSecurityDomains(NAME).build());
 
-                @Override
-                public void remove(CLIWrapper cli) throws Exception {
-                    cli.sendLine(
-                            "/subsystem=elytron/security-domain=ManagementDomain:undefine-attribute(name=trusted-security-domains)");
-                }
-
-                @Override
-                public String getName() {
-                    return "domain-trust";
-                }
-            });
+            // kerberos-security-factory
+            elements.add(
+                    KerberosSecurityFactory
+                            .builder().withName(NAME).withPrincipal(Krb5ConfServerSetupTask.REMOTE_PRINCIPAL).withPath(Path
+                                    .builder().withPath(Krb5ConfServerSetupTask.REMOTE_KEYTAB_FILE.getAbsolutePath()).build())
+                            .build());
 
             // SASL Authentication
             elements.add(SimpleConfigurableSaslServerFactory.builder().withName(NAME).withSaslServerFactory("elytron")
                     .addFilter(SaslFilter.builder().withPatternFilter(MECHANISM).build()).build());
-            elements.add(SimpleSaslAuthenticationFactory.builder().withName(NAME).withSaslServerFactory(NAME)
-                    .withSecurityDomain(NAME)
-                    .addMechanismConfiguration(MechanismConfiguration.builder().withMechanismName(MECHANISM).build()).build());
-
-            // SSLContext
-            elements.add(SimpleServerSslContext.builder().withName(NAME).withKeyManagers("server-keymanager")
-                    .withTrustManagers("server-trustmanager").withSecurityDomain(NAME).withAuthenticationOptional(false)
-                    .withNeedClientAuth(true).build());
+            elements.add(
+                    SimpleSaslAuthenticationFactory.builder().withName(NAME).withSaslServerFactory(NAME)
+                            .withSecurityDomain(NAME)
+                            .addMechanismConfiguration(MechanismConfiguration.builder().withMechanismName(MECHANISM)
+                                    .addMechanismRealmConfiguration(
+                                            MechanismRealmConfiguration.builder().withRealmName(NAME).build())
+                                    .withCredentialSecurityFactory(NAME).build())
+                            .build());
 
             // Socket binding and native management interface
             elements.add(SimpleSocketBinding.builder().withName(NAME).withPort(PORT_NATIVE).build());
             elements.add(SimpleMgmtNativeInterface.builder().withSocketBinding(NAME).withSaslAuthenticationFactory(NAME)
-                    .withSslContext(NAME).build());
+                    .build());
 
             return elements.toArray(new ConfigurableElement[elements.size()]);
         }
@@ -336,14 +251,14 @@ public class GssapiMgmtSaslTestCase {
 
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
-            FileUtils.deleteQuietly(WORK_DIR);
-            WORK_DIR.mkdir();
-            Utils.createKeyMaterial(WORK_DIR);
+            FileUtils.deleteQuietly(WORK_DIR_GSSAPI);
+            WORK_DIR_GSSAPI.mkdir();
+            Utils.createKeyMaterial(WORK_DIR_GSSAPI);
         }
 
         @Override
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
-            FileUtils.deleteQuietly(WORK_DIR);
+            FileUtils.deleteQuietly(WORK_DIR_GSSAPI);
         }
 
     }
@@ -352,10 +267,20 @@ public class GssapiMgmtSaslTestCase {
      * Task which generates krb5.conf and keytab file(s).
      */
     public static class Krb5ConfServerSetupTask extends AbstractKrb5ConfServerSetupTask {
+        public static final File HNELSON_KEYTAB_FILE = new File(WORK_DIR, "hnelson.keytab");
+        public static final File JDUKE_KEYTAB_FILE = new File(WORK_DIR, "jduke.keytab");
+        public static final String REMOTE_PRINCIPAL = "remote/" + Utils.getSecondaryTestAddress(null, true) + "@JBOSS.ORG";
+        public static final File REMOTE_KEYTAB_FILE = new File(WORK_DIR, "remote.keytab");
+
         @Override
         protected List<UserForKeyTab> kerberosUsers() {
-            return null;
+            List<UserForKeyTab> users = new ArrayList<UserForKeyTab>();
+            users.add(new UserForKeyTab("hnelson@JBOSS.ORG", "secret", HNELSON_KEYTAB_FILE));
+            users.add(new UserForKeyTab("jduke@JBOSS.ORG", "theduke", JDUKE_KEYTAB_FILE));
+            users.add(new UserForKeyTab(REMOTE_PRINCIPAL, "zelvicka", REMOTE_KEYTAB_FILE));
+            return users;
         }
+
     }
 
     //@formatter:off
@@ -373,12 +298,28 @@ public class GssapiMgmtSaslTestCase {
                     {
                             @CreateTransport(protocol = "UDP", port = 6088)
                     })
+    @CreateLdapServer(
+            transports =
+                    {
+                            @CreateTransport(protocol = "LDAP", port = LDAP_PORT)
+                    },
+            saslHost = "localhost",
+            saslPrincipal = "ldap/localhost@JBOSS.ORG",
+            saslMechanisms =
+                    {
+                            @SaslMechanism(name = SupportedSaslMechanisms.PLAIN, implClass = PlainMechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.CRAM_MD5, implClass = CramMd5MechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.DIGEST_MD5, implClass = DigestMd5MechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.GSSAPI, implClass = GssapiMechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.NTLM, implClass = NtlmMechanismHandler.class),
+                            @SaslMechanism(name = SupportedSaslMechanisms.GSS_SPNEGO, implClass = NtlmMechanismHandler.class)
+                    })
     //@formatter:on
-    static class KDCServerSetupTask implements ServerSetupTask {
+    static class DirectoryServerSetupTask implements ServerSetupTask {
 
         private DirectoryService directoryService;
         private KdcServer kdcServer;
-
+        private LdapServer ldapServer;
         private boolean removeBouncyCastle = false;
 
         /**
@@ -388,7 +329,7 @@ public class GssapiMgmtSaslTestCase {
          * @param containerId
          * @throws Exception
          * @see org.jboss.as.arquillian.api.ServerSetupTask#setup(org.jboss.as.arquillian.container.ManagementClient,
-         * java.lang.String)
+         *      java.lang.String)
          */
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
@@ -404,14 +345,14 @@ public class GssapiMgmtSaslTestCase {
             final String hostname = Utils.getCannonicalHost(managementClient);
             final Map<String, String> map = new HashMap<String, String>();
             map.put("hostname", NetworkUtils.formatPossibleIpv6Address(hostname));
+            final String secondaryTestAddress = NetworkUtils.canonize(Utils.getSecondaryTestAddress(managementClient, true));
+            map.put("ldaphost", secondaryTestAddress);
             final String ldifContent = StrSubstitutor.replace(
-                    IOUtils.toString(
-                            GssapiMgmtSaslTestCase.class.getResourceAsStream(GssapiMgmtSaslTestCase.class.getSimpleName()
-                                    + ".ldif"), "UTF-8"), map);
+                    IOUtils.toString(GssapiMgmtSaslTestCase.class.getResourceAsStream("remoting-krb5-test.ldif"), "UTF-8"),
+                    map);
             LOGGER.trace(ldifContent);
             final SchemaManager schemaManager = directoryService.getSchemaManager();
             try {
-
                 for (LdifEntry ldifEntry : new LdifReader(IOUtils.toInputStream(ldifContent, StandardCharsets.UTF_8))) {
                     directoryService.getAdminSession().add(new DefaultEntry(schemaManager, ldifEntry.getEntry()));
                 }
@@ -420,6 +361,29 @@ public class GssapiMgmtSaslTestCase {
                 throw e;
             }
             kdcServer = KDCServerAnnotationProcessor.getKdcServer(directoryService, 1024, hostname);
+            final ManagedCreateLdapServer createLdapServer = new ManagedCreateLdapServer(
+                    (CreateLdapServer) AnnotationUtils.getInstance(CreateLdapServer.class));
+            createLdapServer.setSaslHost(secondaryTestAddress);
+            createLdapServer.setSaslPrincipal("ldap/" + secondaryTestAddress + "@JBOSS.ORG");
+            fixTransportAddress(createLdapServer, secondaryTestAddress);
+            ldapServer = ServerAnnotationProcessor.instantiateLdapServer(createLdapServer, directoryService);
+            ldapServer.getSaslHost();
+            ldapServer.setSearchBaseDn("dc=wildfly,dc=org");
+            ldapServer.start();
+        }
+
+        /**
+         * Fixes bind address in the CreateTransport annotation.
+         *
+         * @param createLdapServer
+         */
+        private void fixTransportAddress(ManagedCreateLdapServer createLdapServer, String address) {
+            final CreateTransport[] createTransports = createLdapServer.transports();
+            for (int i = 0; i < createTransports.length; i++) {
+                final ManagedCreateTransport mgCreateTransport = new ManagedCreateTransport(createTransports[i]);
+                mgCreateTransport.setAddress(address);
+                createTransports[i] = mgCreateTransport;
+            }
         }
 
         /**
@@ -429,10 +393,11 @@ public class GssapiMgmtSaslTestCase {
          * @param containerId
          * @throws Exception
          * @see org.jboss.as.arquillian.api.ServerSetupTask#tearDown(org.jboss.as.arquillian.container.ManagementClient,
-         * java.lang.String)
+         *      java.lang.String)
          */
         @Override
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
+            ldapServer.stop();
             kdcServer.stop();
             directoryService.shutdown();
             FileUtils.deleteDirectory(directoryService.getInstanceLayout().getInstanceDirectory());
@@ -443,6 +408,7 @@ public class GssapiMgmtSaslTestCase {
                     LOGGER.warn("Cannot deregister BouncyCastleProvider", ex);
                 }
             }
+
         }
 
     }

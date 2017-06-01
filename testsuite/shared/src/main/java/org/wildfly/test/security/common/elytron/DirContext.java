@@ -83,12 +83,7 @@ public class DirContext extends AbstractConfigurableElement {
         setIfNotNull(op, "enable-connection-pooling", enableConnectionPooling);
         setIfNotNull(op, "module", module);
         setIfNotNull(op, "principal", principal);
-        if (!properties.isEmpty()) {
-            final ModelNode propsNode = op.get("properties");
-            for (Map.Entry<String, String> propEntry : properties.entrySet()) {
-                propsNode.get(propEntry.getKey()).set(propEntry.getValue());
-            }
-        }
+        setIfNotNull(op, "properties", properties);
         setIfNotNull(op, "read-timeout", readTimeout);
         setIfNotNull(op, "referral-mode", referralMode);
         setIfNotNull(op, "ssl-context", sslContext);
