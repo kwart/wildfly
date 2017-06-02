@@ -32,6 +32,7 @@ import java.util.Map;
 import javax.security.auth.Subject;
 import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginContext;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.text.StrSubstitutor;
@@ -104,7 +105,7 @@ import org.wildfly.test.security.common.elytron.SimpleConfigurableSaslServerFact
 import org.wildfly.test.security.common.elytron.SimpleSaslAuthenticationFactory;
 import org.wildfly.test.security.common.elytron.SimpleSecurityDomain;
 import org.wildfly.test.security.common.elytron.SimpleSecurityDomain.SecurityDomainRealm;
-import org.wildfly.test.security.common.elytron.TrustedDomainsConfigurator;
+import org.wildfly.test.security.common.other.AccessIdentityConfigurator;
 import org.wildfly.test.security.common.other.SimpleMgmtNativeInterface;
 import org.wildfly.test.security.common.other.SimpleSocketBinding;
 
@@ -164,17 +165,30 @@ public class GssapiMgmtSaslTestCase {
         final Krb5LoginConfiguration krb5Configuration = new Krb5LoginConfiguration(Utils.getLoginConfiguration());
         // Use our custom configuration to avoid reliance on external config
         Configuration.setConfiguration(krb5Configuration);
-        // 1. Authenticate to Kerberos.
-        final LoginContext lc = Utils.loginWithKerberos(krb5Configuration, "hnelson", "secret");
+        try {
+            // 1. Authenticate to Kerberos.
+            final LoginContext lc = Utils.loginWithKerberos(krb5Configuration, "hnelson", "secret");
+            try {
+                AuthenticationConfiguration authCfg = AuthenticationConfiguration.empty()
+                        .useProvidersFromClassLoader(GssapiMgmtSaslTestCase.class.getClassLoader())
+                        .allowSaslMechanisms(MECHANISM).useGSSCredential(getGSSCredential(lc.getSubject()));
 
+                AuthenticationContext.empty().with(MatchRule.ALL, authCfg).run(() -> assertWhoAmI("hnelson@JBOSS.ORG"));
+            } finally {
+                lc.logout();
+            }
+        } finally {
+            krb5Configuration.resetConfiguration();
+        }
+    }
+
+    @Test
+    public void testAuthnFailsWithoutTicket() throws Exception {
         AuthenticationConfiguration authCfg = AuthenticationConfiguration.empty()
-                // .useDefaultProviders()
-                .allowSaslMechanisms(MECHANISM).useGSSCredential(getGSSCredential(lc.getSubject()));
+                .useProvidersFromClassLoader(GssapiMgmtSaslTestCase.class.getClassLoader()).allowSaslMechanisms(MECHANISM);
 
-        AuthenticationContext.empty().with(MatchRule.ALL, authCfg).run(() -> assertWhoAmI("hnelson"));
-
-        lc.logout();
-        krb5Configuration.resetConfiguration();
+        AuthenticationContext.empty().with(MatchRule.ALL, authCfg).run(() -> AbstractMgmtSaslTestBase
+                .assertAuthenticationFails("Authentication without Kerberos ticket should not be possible"));
     }
 
     private GSSCredential getGSSCredential(Subject subject) {
@@ -215,9 +229,7 @@ public class GssapiMgmtSaslTestCase {
             // security-domain
             elements.add(SimpleSecurityDomain.builder().withName(NAME).withDefaultRealm(NAME).withPermissionMapper(NAME)
                     .withRealms(SecurityDomainRealm.builder().withRealm(NAME).build()).build());
-            // domain trust for ManagementDomain
-            elements.add(
-                    TrustedDomainsConfigurator.builder().withName("ManagementDomain").withTrustedSecurityDomains(NAME).build());
+            elements.add(AccessIdentityConfigurator.builder().build());
 
             // kerberos-security-factory
             elements.add(
@@ -240,8 +252,8 @@ public class GssapiMgmtSaslTestCase {
 
             // Socket binding and native management interface
             elements.add(SimpleSocketBinding.builder().withName(NAME).withPort(PORT_NATIVE).build());
-            elements.add(SimpleMgmtNativeInterface.builder().withSocketBinding(NAME).withSaslAuthenticationFactory(NAME)
-                    .build());
+            elements.add(
+                    SimpleMgmtNativeInterface.builder().withSocketBinding(NAME).withSaslAuthenticationFactory(NAME).build());
 
             return elements.toArray(new ConfigurableElement[elements.size()]);
         }
@@ -410,7 +422,6 @@ public class GssapiMgmtSaslTestCase {
             }
 
         }
-
     }
 
 }
