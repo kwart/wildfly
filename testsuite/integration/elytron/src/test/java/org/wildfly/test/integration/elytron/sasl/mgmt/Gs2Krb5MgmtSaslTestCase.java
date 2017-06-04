@@ -114,17 +114,17 @@ import org.wildfly.test.security.common.other.SimpleSocketBinding;
  * @author Josef Cacek
  */
 @RunWith(Arquillian.class)
-@ServerSetup({ GssapiMgmtSaslTestCase.Krb5ConfServerSetupTask.class, //
+@ServerSetup({ Gs2Krb5MgmtSaslTestCase.Krb5ConfServerSetupTask.class, //
         KerberosSystemPropertiesSetupTask.class, //
-        GssapiMgmtSaslTestCase.DirectoryServerSetupTask.class, //
+        Gs2Krb5MgmtSaslTestCase.DirectoryServerSetupTask.class, //
         // GssapiMgmtSaslTestCase.KeyMaterialSetup.class, //
-        GssapiMgmtSaslTestCase.ServerSetup.class })
+        Gs2Krb5MgmtSaslTestCase.ServerSetup.class })
 @RunAsClient
-public class GssapiMgmtSaslTestCase {
+public class Gs2Krb5MgmtSaslTestCase {
 
-    private static Logger LOGGER = Logger.getLogger(GssapiMgmtSaslTestCase.class);
+    private static Logger LOGGER = Logger.getLogger(Gs2Krb5MgmtSaslTestCase.class);
 
-    private static final String NAME = GssapiMgmtSaslTestCase.class.getSimpleName();
+    private static final String NAME = Gs2Krb5MgmtSaslTestCase.class.getSimpleName();
     private static final int LDAP_PORT = 10389;
     private static final String LDAP_URL = "ldap://"
             + NetworkUtils.formatPossibleIpv6Address(Utils.getSecondaryTestAddress(null, true)) + ":" + LDAP_PORT;
@@ -144,7 +144,7 @@ public class GssapiMgmtSaslTestCase {
     private static final File CLIENT_TRUSTSTORE_FILE = new File(WORK_DIR_GSSAPI, SecurityTestConstants.CLIENT_TRUSTSTORE);
     private static final File UNTRUSTED_STORE_FILE = new File(WORK_DIR_GSSAPI, SecurityTestConstants.UNTRUSTED_KEYSTORE);
 
-    private static final String MECHANISM = "GSSAPI";
+    private static final String MECHANISM = "GS2-KRB5";
 
     // @Override
     protected String getMechanism() {
@@ -169,7 +169,7 @@ public class GssapiMgmtSaslTestCase {
             final LoginContext lc = Utils.loginWithKerberos(krb5Configuration, "hnelson", "secret");
             try {
                 AuthenticationConfiguration authCfg = AuthenticationConfiguration.empty()
-                        .useProvidersFromClassLoader(GssapiMgmtSaslTestCase.class.getClassLoader())
+                        .useProvidersFromClassLoader(Gs2Krb5MgmtSaslTestCase.class.getClassLoader())
                         .allowSaslMechanisms(MECHANISM).useGSSCredential(getGSSCredential(lc.getSubject()));
 
                 AuthenticationContext.empty().with(MatchRule.ALL, authCfg).run(() -> assertWhoAmI("hnelson@JBOSS.ORG"));
@@ -184,7 +184,7 @@ public class GssapiMgmtSaslTestCase {
     @Test
     public void testAuthnFailsWithoutTicket() throws Exception {
         AuthenticationConfiguration authCfg = AuthenticationConfiguration.empty()
-                .useProvidersFromClassLoader(GssapiMgmtSaslTestCase.class.getClassLoader()).allowSaslMechanisms(MECHANISM);
+                .useProvidersFromClassLoader(Gs2Krb5MgmtSaslTestCase.class.getClassLoader()).allowSaslMechanisms(MECHANISM);
 
         AuthenticationContext.empty().with(MatchRule.ALL, authCfg).run(() -> AbstractMgmtSaslTestBase
                 .assertAuthenticationFails("Authentication without Kerberos ticket should not be possible"));
@@ -359,7 +359,7 @@ public class GssapiMgmtSaslTestCase {
             final String secondaryTestAddress = NetworkUtils.canonize(Utils.getSecondaryTestAddress(managementClient, true));
             map.put("ldaphost", secondaryTestAddress);
             final String ldifContent = StrSubstitutor.replace(
-                    IOUtils.toString(GssapiMgmtSaslTestCase.class.getResourceAsStream("remoting-krb5-test.ldif"), "UTF-8"),
+                    IOUtils.toString(Gs2Krb5MgmtSaslTestCase.class.getResourceAsStream("remoting-krb5-test.ldif"), "UTF-8"),
                     map);
             LOGGER.trace(ldifContent);
             final SchemaManager schemaManager = directoryService.getSchemaManager();
