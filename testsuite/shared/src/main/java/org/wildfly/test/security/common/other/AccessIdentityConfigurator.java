@@ -79,7 +79,7 @@ public class AccessIdentityConfigurator implements ConfigurableElement {
             } else if (!domainToSet.equals(origDomainValue)) {
                 op = Util.createEmptyOperation("write-attribute", IDENTITY_ADDR);
                 op.get("name").set("security-domain");
-                op.get("value").add(domainToSet);
+                op.get("value").set(domainToSet);
             }
         } else if (domainToSet != null) {
             op = Util.createAddOperation(IDENTITY_ADDR);
