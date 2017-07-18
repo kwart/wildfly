@@ -1,0 +1,5 @@
+package org.wildfly.test.manual.elytron.seccontext;
+
+public enum ReAuthnType {
+    NO_REAUTHN, FORWARDED_IDENTITY, AUTHENTICATION_CONTEXT, SECURITY_DOMAIN_AUTHENTICATE, SECURITY_DOMAIN_AUTHENTICATE_FORWARDED
+}

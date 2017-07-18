@@ -80,6 +80,8 @@
                             <!-- Workaround for nasty and hacky tests not cleaning up completely after themselves. -->
                             <reuseForks>false</reuseForks>
 
+<!-- 
+ -->
                             <includes>
                                 <include>org/jboss/as/test/manualmode/**/*TestCase.java</include>
                             </includes>
