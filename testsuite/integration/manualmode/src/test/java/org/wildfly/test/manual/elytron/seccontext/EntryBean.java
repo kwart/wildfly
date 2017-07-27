@@ -20,7 +20,6 @@ import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
 import javax.naming.NamingException;
 
-import org.apache.commons.io.IOUtils;
 import org.wildfly.security.auth.client.AuthenticationContext;
 
 @Stateless
@@ -66,8 +65,8 @@ public class EntryBean implements Entry {
         final Callable<String> callable = () -> {
             URLConnection conn = url.openConnection();
             conn.connect();
-            try (InputStream is = conn.getInputStream()) {
-                return IOUtils.toString(is, StandardCharsets.UTF_8);
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                return br.readLine();
             }
         };
         String result = null;
