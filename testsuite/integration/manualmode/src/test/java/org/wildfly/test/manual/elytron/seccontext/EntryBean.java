@@ -1,9 +1,9 @@
 package org.wildfly.test.manual.elytron.seccontext;
 
-import static org.wildfly.test.manual.elytron.seccontext.SeccontextUtil.SERVER2;
 import static org.wildfly.test.manual.elytron.seccontext.SeccontextUtil.switchIdentity;
 
-import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.Authenticator;
@@ -19,9 +19,7 @@ import javax.ejb.SessionContext;
 import javax.ejb.Stateless;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
-import javax.naming.NamingException;
 
-import org.apache.commons.io.IOUtils;
 import org.wildfly.security.auth.util.ElytronAuthenticator;
 
 @Stateless
@@ -42,8 +40,8 @@ public class EntryBean implements Entry {
         final Callable<String> callable = () -> {
             URLConnection conn = url.openConnection();
             conn.connect();
-            try (InputStream is = conn.getInputStream()) {
-                return IOUtils.toString(is, StandardCharsets.UTF_8);
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                return br.readLine();
             }
         };
         String result = null;
