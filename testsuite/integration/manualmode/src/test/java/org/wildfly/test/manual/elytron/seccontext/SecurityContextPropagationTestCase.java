@@ -16,6 +16,8 @@
 package org.wildfly.test.manual.elytron.seccontext;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.startsWith;
 import static org.jboss.as.controller.client.helpers.ClientConstants.SERVER_CONFIG;
 import static org.junit.Assert.assertArrayEquals;
@@ -33,7 +35,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -163,24 +164,24 @@ public class SecurityContextPropagationTestCase {
         assertArrayEquals("Unexpected principal names returned from doubleWhoAmI", new String[] { "entry", "whoami" },
                 doubleWhoAmI);
 
-        doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
-                getDoubleWhoAmICallable(ReAuthnType.AUTHENTICATION_CONTEXT, "doesntexist", "whoami"),
-                ReAuthnType.AUTHENTICATION_CONTEXT);
-        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
-        assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
-        assertEquals("entry", doubleWhoAmI[0]);
-        assertThat(doubleWhoAmI[1], startsWith(
-                "org.jboss.ejb.client.RequestSendFailedException: org.wildfly.security.auth.AuthenticationException"));
-
-        doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
-                getDoubleWhoAmICallable(ReAuthnType.AUTHENTICATION_CONTEXT, "whoami", "wrongpass"),
-                ReAuthnType.AUTHENTICATION_CONTEXT);
-        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
-        assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
-        assertEquals("entry", doubleWhoAmI[0]);
-        assertThat(doubleWhoAmI[1], startsWith(
-                "org.jboss.ejb.client.RequestSendFailedException: org.wildfly.security.auth.AuthenticationException"));
-
+//        doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
+//                getDoubleWhoAmICallable(ReAuthnType.AUTHENTICATION_CONTEXT, "doesntexist", "whoami"),
+//                ReAuthnType.AUTHENTICATION_CONTEXT);
+//        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
+//        assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
+//        assertEquals("entry", doubleWhoAmI[0]);
+//        assertThat(doubleWhoAmI[1], startsWith(
+//                "org.jboss.ejb.client.RequestSendFailedException: org.wildfly.security.auth.AuthenticationException"));
+//
+//        doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
+//                getDoubleWhoAmICallable(ReAuthnType.AUTHENTICATION_CONTEXT, "whoami", "wrongpass"),
+//                ReAuthnType.AUTHENTICATION_CONTEXT);
+//        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
+//        assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
+//        assertEquals("entry", doubleWhoAmI[0]);
+//        assertThat(doubleWhoAmI[1], startsWith(
+//                "org.jboss.ejb.client.RequestSendFailedException: org.wildfly.security.auth.AuthenticationException"));
+//
         try {
             SeccontextUtil.switchIdentity("whoami", "whoami", getDoubleWhoAmICallable(ReAuthnType.AUTHENTICATION_CONTEXT),
                     ReAuthnType.AUTHENTICATION_CONTEXT);
@@ -201,7 +202,7 @@ public class SecurityContextPropagationTestCase {
         assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
         assertEquals("entry", doubleWhoAmI[0]);
         assertThat(doubleWhoAmI[1],
-                startsWith("org.jboss.ejb.client.RequestSendFailedException: javax.security.sasl.SaslException"));
+                startsWith("javax.ejb.NoSuchEJBException: EJBCLIENT000079"));
 
         doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
                 getDoubleWhoAmICallable(ReAuthnType.AUTHENTICATION_CONTEXT, "whoami", "wrongpass"),
@@ -210,7 +211,7 @@ public class SecurityContextPropagationTestCase {
         assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
         assertEquals("entry", doubleWhoAmI[0]);
         assertThat(doubleWhoAmI[1],
-                startsWith("org.jboss.ejb.client.RequestSendFailedException: javax.security.sasl.SaslException"));
+                startsWith("javax.ejb.NoSuchEJBException: EJBCLIENT000079"));
     }
 
     @Test
@@ -238,7 +239,7 @@ public class SecurityContextPropagationTestCase {
         assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
         assertEquals("entry", doubleWhoAmI[0]);
         assertThat(doubleWhoAmI[1],
-                startsWith("org.jboss.ejb.client.RequestSendFailedException: javax.security.sasl.SaslException"));
+                startsWith("javax.ejb.NoSuchEJBException: EJBCLIENT000079"));
 
         doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
                 getDoubleWhoAmICallable(ReAuthnType.SECURITY_DOMAIN_AUTHENTICATE, "doesntexist", "whoami"),
@@ -255,7 +256,6 @@ public class SecurityContextPropagationTestCase {
                 getDoubleWhoAmICallable(ReAuthnType.SECURITY_DOMAIN_AUTHENTICATE_FORWARDED),
                 ReAuthnType.AUTHENTICATION_CONTEXT);
         assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
-        assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
         assertArrayEquals("Unexpected principal names returned from doubleWhoAmI", new String[] { "entry", "whoami" },
                 doubleWhoAmI);
 
@@ -266,7 +266,53 @@ public class SecurityContextPropagationTestCase {
         assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
         assertEquals("entry", doubleWhoAmI[0]);
         assertThat(doubleWhoAmI[1],
-                startsWith("org.jboss.ejb.client.RequestSendFailedException: javax.security.sasl.SaslException"));
+                startsWith("java.lang.SecurityException: ELY01151")); //Evidence verification failed
+    }
+
+
+    @Test
+    public void test() throws Exception {
+//        String[] doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
+//                getDoubleWhoAmICallable(ReAuthnType.SECURITY_DOMAIN_AUTHENTICATE), ReAuthnType.AUTHENTICATION_CONTEXT);
+//        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
+//        assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
+//        assertEquals("entry", doubleWhoAmI[0]);
+//        assertThat(doubleWhoAmI[1],
+//                startsWith("javax.ejb.NoSuchEJBException: EJBCLIENT000079"));
+//
+//        doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
+//                getDoubleWhoAmICallable(ReAuthnType.SECURITY_DOMAIN_AUTHENTICATE, "doesntexist", "whoami"),
+//                ReAuthnType.AUTHENTICATION_CONTEXT);
+//        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
+//        assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
+//        assertEquals("entry", doubleWhoAmI[0]);
+//        assertThat(doubleWhoAmI[1], startsWith("java.lang.SecurityException: ELY01151")); // Evidence verification failed
+
+        String[] doubleWhoAmI = AuthenticationContext.empty()
+                .with(MatchRule.ALL,
+                        AuthenticationConfiguration.empty().setSaslMechanismSelector(SaslMechanismSelector.ALL)
+                                .useBearerTokenCredential(new BearerTokenCredential(createJwtToken("admin"))))
+                .runCallable(getDoubleWhoAmICallable(ReAuthnType.FORWARDED_IDENTITY, null, null));
+        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
+        assertArrayEquals("Unexpected principal names returned from doubleWhoAmI", new String[] { "admin", "admin" },
+                doubleWhoAmI);
+
+//        doubleWhoAmI = AuthenticationContext.empty()
+//                .with(MatchRule.ALL,
+//                        AuthenticationConfiguration.empty().setSaslMechanismSelector(SaslMechanismSelector.ALL)
+//                                .useBearerTokenCredential(new BearerTokenCredential(createJwtToken("entry"))))
+//                .runCallable(callable);
+//        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
+//        assertEquals("The result of doubleWhoAmI() has wrong lenght", 2, doubleWhoAmI.length);
+//        assertEquals("entry", doubleWhoAmI[0]);
+//        assertThat(doubleWhoAmI[1], startsWith("javax.ejb.EJBAccessException"));
+
+        doubleWhoAmI = SeccontextUtil.switchIdentity("entry", "entry",
+                getDoubleWhoAmICallable(ReAuthnType.SECURITY_DOMAIN_AUTHENTICATE_FORWARDED),
+                ReAuthnType.AUTHENTICATION_CONTEXT);
+        assertNotNull("The entryBean.doubleWhoAmI() should return not-null instance", doubleWhoAmI);
+        assertArrayEquals("Unexpected principal names returned from doubleWhoAmI", new String[] { "entry", "whoami" },
+                doubleWhoAmI);
     }
 
     @Test
@@ -321,13 +367,20 @@ public class SecurityContextPropagationTestCase {
     @Ignore("JBEAP-12340 JBEAP-12341")
     public void testHttpReauthn() throws Exception {
         Callable<String> callable = getEjbToServletCallable(ReAuthnType.AUTHENTICATION_CONTEXT, "servlet", "servlet");
-        String servletResponse = SeccontextUtil.switchIdentity("entry", "entry", callable, ReAuthnType.AUTHENTICATION_CONTEXT);
+        String servletResponse = SeccontextUtil.switchIdentity("admin", "admin", callable, ReAuthnType.AUTHENTICATION_CONTEXT);
         assertEquals("Unexpected principal name returned from servlet call", "servlet", servletResponse);
+    }
+
+    @Test
+    public void testHttpReauthnInsufficientRoles() throws Exception {
+        Callable<String> callable = getEjbToServletCallable(ReAuthnType.AUTHENTICATION_CONTEXT, "whoami", "whoami");
+        String servletResponse = SeccontextUtil.switchIdentity("entry", "entry", callable, ReAuthnType.AUTHENTICATION_CONTEXT);
+        assertThat(servletResponse, allOf(startsWith("java.io.IOException"), containsString("401")));
     }
 
     /**
      * Creates callable for executing {@link Entry#doubleWhoAmI(String, String, ReAuthnType, String)} as "whoami" user.
-     * 
+     *
      * @param type reauthentication reauthentication type used within the doubleWhoAmI
      * @return Callable
      */
@@ -338,7 +391,7 @@ public class SecurityContextPropagationTestCase {
 
     /**
      * Creates callable for executing {@link Entry#doubleWhoAmI(String, String, ReAuthnType, String)} as given user.
-     * 
+     *
      * @param type reauthentication re-authentication type used within the doubleWhoAmI
      * @param username
      * @param password
@@ -400,7 +453,7 @@ public class SecurityContextPropagationTestCase {
 
                 takeSnapshot();
             } else {
-                reloadToSnapshot();
+//                reloadToSnapshot();
             }
         }
 

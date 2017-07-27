@@ -3,7 +3,8 @@ package org.wildfly.test.manual.elytron.seccontext;
 import static org.wildfly.test.manual.elytron.seccontext.SeccontextUtil.SERVER2;
 import static org.wildfly.test.manual.elytron.seccontext.SeccontextUtil.switchIdentity;
 
-import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URL;
@@ -19,8 +20,6 @@ import javax.ejb.Stateless;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
 import javax.naming.NamingException;
-
-import org.wildfly.security.auth.client.AuthenticationContext;
 
 @Stateless
 @RolesAllowed({ "entry", "admin" })
