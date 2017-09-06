@@ -39,6 +39,13 @@ public class SeccontextUtil {
     public static final String SERVER1 = "seccontext-server1";
     public static final String SERVER2 = "seccontext-server2";
 
+    public static final String JAR_ENTRY_EJB = "entry-ejb";
+    public static final String WAR_WHOAMI = "whoami";
+    public static final String WAR_ENTRY_SERVLET_BASIC = "entry-servlet-basic";
+    public static final String WAR_ENTRY_SERVLET_FORM = "entry-servlet-form";
+    public static final String WAR_ENTRY_SERVLET_BEARER_TOKEN = "entry-servlet-bearer";
+
+
     /**
      * Method which handles {@link ReAuthnType} types by using Elytron API. Based on provided type new
      * {@link AuthenticationContext} is created and given callable is called within the context.

@@ -37,7 +37,11 @@
 
 /subsystem=elytron/http-authentication-factory=seccontext:add(security-domain=SeccontextDomain, \ 
     http-server-mechanism-factory=global, \
-    mechanism-configurations=[{mechanism-name=BASIC}])
+    mechanism-configurations=[ \
+        {mechanism-name=BASIC}, \
+        {mechanism-name=FORM}, \
+        {mechanism-name=BEARER_TOKEN, mechanism-realm-configurations=[{realm-mapper=JWT, realm-name=JWT-protected}]} \
+    ])
 
 /subsystem=undertow/application-security-domain=seccontext-web:add(http-authentication-factory=seccontext)
 /subsystem=remoting/http-connector=http-remoting-connector:write-attribute(name=sasl-authentication-factory, \
